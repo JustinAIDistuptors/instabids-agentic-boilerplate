@@ -1,0 +1,58 @@
+# Supabase Local Development Configuration
+
+[project_id]
+project_id = "instabids-local"
+
+[api]
+port = 54321
+schemas = ["public", "storage", "auth"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+port = 54323
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+jwt_expiry = 3600
+enable_signup = true
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = false
+enable_confirmations = false
+
+# Configure email templates for local development
+[auth.email.template.invite]
+subject = "You have been invited to InstaBids"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.confirmation]
+subject = "Confirm your InstaBids account"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.reset]
+subject = "Reset your InstaBids password"
+content_path = "./supabase/templates/reset.html"
+
+[auth.external.google]
+enabled = false
+client_id = ""
+secret = ""
+
+[storage]
+file_size_limit = "50MiB"
+
+[db.pooler]
+enabled = true
+default_pool_size = 20
+max_pool_size = 50
+
+[analytics]
+enabled = false
