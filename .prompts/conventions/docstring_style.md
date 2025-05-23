@@ -1,278 +1,262 @@
-## Convention: ADK Tool Docstring Format
+# Docstring Style Convention
 
-### Purpose
+## Overview
 
-All Python functions intended for use as ADK FunctionTools MUST have comprehensive docstrings. The LLM relies critically on these for understanding and correct usage.
+All Python code in the InstaBids project must include comprehensive docstrings following Google style with specific requirements for ADK tools.
 
-### Required Sections
-
-Every tool docstring MUST include:
-
-1. **Brief summary** (1-2 lines)
-2. **Detailed description** (if needed)
-3. **Args section** with types and descriptions
-4. **Returns section** with type and structure
-5. **Raises section** (if applicable)
-6. **Examples section** (recommended)
-
-### Standard Format
+## Module Docstrings
 
 ```python
-def tool_name(
+"""Module for Supabase database operations.
+
+This module provides tools for interacting with Supabase including
+CRUD operations, batch processing, and real-time subscriptions.
+
+Typical usage example:
+    from instabids.tools import supabase_tools
+    
+    result = supabase_tools.save_project(
+        tool_context,
+        project_data={"title": "Kitchen Renovation"}
+    )
+"""
+```
+
+## Class Docstrings
+
+```python
+class HomeownerAgent(LiveAgent):
+    """AI agent for guiding homeowners through project scoping.
+    
+    This agent conducts conversational Q&A to gather project requirements,
+    analyzes uploaded images, and learns user preferences over time.
+    
+    Attributes:
+        name: Agent identifier used in routing.
+        model: LLM model ID for inference.
+        tools: List of available tool functions.
+        
+    Example:
+        agent = HomeownerAgent()
+        response = await agent.process("I need help with my roof")
+    """
+```
+
+## Function/Tool Docstrings
+
+### Requirements for ADK Tools
+
+**Minimum 5 lines** with the following structure:
+
+```python
+def analyze_project_image(
     tool_context: ToolContext,
-    required_param: str,
-    optional_param: Optional[int] = None
+    image_path: str,
+    analysis_type: str = "general"
 ) -> Dict[str, Any]:
     """
-    Brief one-line summary of what the tool does.
+    Analyze uploaded project images using OpenAI Vision API.
     
-    More detailed description if needed. Explain when and why
-    to use this tool, any important considerations, and how
-    it fits into the larger system.
+    This tool processes images to identify project scope, damage assessment,
+    and material requirements. Results are used to enhance bid card accuracy.
     
     Args:
-        tool_context (ToolContext): The ADK tool context providing
-            access to session state and other context. Always first.
-        required_param (str): Description of this parameter. Be specific
-            about format, constraints, and valid values.
-        optional_param (Optional[int]): Description of optional parameter.
-            Explain default behavior when None. Defaults to None.
+        tool_context (ToolContext): ADK context providing access to session state
+            and user information. Required for all ADK tools.
+        image_path (str): Path to uploaded image file. Must be within allowed
+            storage directories.
+        analysis_type (str, optional): Type of analysis to perform. Options:
+            - "general": Overall project assessment
+            - "damage": Specific damage identification
+            - "materials": Material and fixture identification
+            Defaults to "general".
     
     Returns:
-        dict: Operation result with standardized structure:
+        dict: Analysis results with the following structure:
             {
                 "status": "success" or "error",
-                "message": "Human-readable message",
-                "data": {... actual result data ...},
-                "metadata": {... optional metadata ...}
-            }
-    
-    Raises:
-        ValueError: If required_param is empty or invalid format.
-        ConnectionError: If database connection fails.
-        PermissionError: If user lacks required permissions.
-    
-    Examples:
-        >>> result = tool_name(
-        ...     tool_context,
-        ...     required_param="example_value",
-        ...     optional_param=42
-        ... )
-        >>> print(result["status"])
-        "success"
-    
-    Note:
-        This tool requires database write permissions and
-        may modify user preferences.
-    """
-```
-
-### Specific Guidelines
-
-#### 1. Parameter Descriptions
-
-```python
-# ❌ Bad - Too vague
-Args:
-    data (dict): The data to process.
-    
-# ✅ Good - Specific and helpful
-Args:
-    data (dict): Project information containing:
-        - title (str): Project title, 3-200 characters
-        - description (str): Detailed description
-        - budget_min (float): Minimum budget in USD
-        - budget_max (float): Maximum budget in USD
-```
-
-#### 2. Return Value Documentation
-
-```python
-# ❌ Bad - Unclear structure
-Returns:
-    dict: The result.
-    
-# ✅ Good - Clear structure
-Returns:
-    dict: Operation result containing:
-        - status (str): "success" or "error"
-        - project_id (str): UUID of created project (on success)
-        - message (str): Human-readable status message
-        - error_code (str): Specific error code (on error)
-```
-
-#### 3. Complex Parameter Types
-
-```python
-def process_items(
-    tool_context: ToolContext,
-    items: List[Dict[str, Any]],
-    options: Optional[ProcessOptions] = None
-) -> Dict[str, Any]:
-    """
-    Process multiple items with configurable options.
-    
-    Args:
-        tool_context (ToolContext): ADK context.
-        items (List[Dict[str, Any]]): List of items where each item
-            must contain:
-            - id (str): Unique identifier
-            - type (str): One of "project", "bid", "message"
-            - data (dict): Type-specific data
-        options (Optional[ProcessOptions]): Processing configuration:
-            - batch_size (int): Items per batch (default: 10)
-            - retry_failed (bool): Retry on failure (default: True)
-            - timeout_seconds (int): Max time per item (default: 30)
-    """
-```
-
-### Special Cases
-
-#### 1. State-Modifying Tools
-
-```python
-def update_preferences(
-    tool_context: ToolContext,
-    preferences: Dict[str, Any]
-) -> Dict[str, Any]:
-    """
-    Update user preferences in both context state and database.
-    
-    This tool modifies:
-    - tool_context.state["user:preferences"]
-    - Database table `user_preferences`
-    
-    Args:
-        tool_context (ToolContext): ADK context with user state.
-        preferences (dict): Key-value pairs of preferences to update.
-            Keys should be lowercase, underscored strings.
-            Values can be strings, numbers, or booleans.
-    """
-```
-
-#### 2. Async Tools
-
-```python
-async def fetch_external_data(
-    tool_context: ToolContext,
-    source_url: str,
-    timeout: int = 30
-) -> Dict[str, Any]:
-    """
-    Asynchronously fetch data from external source.
-    
-    This is an async tool that should be awaited. It performs
-    non-blocking HTTP requests with automatic retry logic.
-    
-    Args:
-        tool_context (ToolContext): ADK context.
-        source_url (str): Full URL to fetch data from.
-            Must start with https://.
-        timeout (int): Request timeout in seconds. Defaults to 30.
-    """
-```
-
-### Validation Rules
-
-1. **Minimum Length**: At least 5 lines (excluding blank lines)
-2. **First Parameter**: Must be `tool_context: ToolContext`
-3. **All Parameters Documented**: Every parameter in Args section
-4. **Return Structure Clear**: Explicit dict structure or reference
-5. **Error Cases Mentioned**: Either in Raises or description
-
-### Examples by Tool Type
-
-#### Database Tool
-
-```python
-def get_project_by_id(
-    tool_context: ToolContext,
-    project_id: str,
-    include_messages: bool = False
-) -> Dict[str, Any]:
-    """
-    Retrieve project details from database by ID.
-    
-    Fetches project information and optionally includes
-    associated messages. Uses RLS to ensure user can
-    only access their own projects.
-    
-    Args:
-        tool_context (ToolContext): ADK context containing user ID.
-        project_id (str): UUID of the project to retrieve.
-        include_messages (bool): Whether to include message history.
-            Defaults to False.
-    
-    Returns:
-        dict: Project information:
-            {
-                "status": "success",
-                "project": {
-                    "id": "uuid",
-                    "title": "Project Title",
-                    "description": "...",
-                    "created_at": "2025-05-23T10:00:00Z",
-                    "messages": [...] if include_messages=True
+                "analysis": "Detailed description of findings",
+                "confidence": 0.0-1.0 confidence score,
+                "detected_issues": ["issue1", "issue2"],
+                "estimated_scope": "minor" or "major",
+                "metadata": {
+                    "processing_time": 1.23,
+                    "model_used": "gpt-4-vision"
                 }
             }
     
     Raises:
-        ValueError: If project_id is not valid UUID format.
-        PermissionError: If user doesn't own the project.
-        LookupError: If project doesn't exist.
+        ValueError: If image_path is invalid or file not found.
+        PermissionError: If image is outside allowed directories.
+        APIError: If vision API call fails.
+    
+    Example:
+        result = analyze_project_image(
+            tool_context,
+            "/tmp/uploads/user123/roof.jpg",
+            analysis_type="damage"
+        )
+        
+        if result["status"] == "success":
+            print(f"Found issues: {result['detected_issues']}")
+    
+    Note:
+        This tool consumes API credits. Results are cached for 24 hours
+        to minimize costs. Large images are automatically resized.
     """
 ```
 
-#### Analytics Tool
+## Method Docstrings
 
 ```python
-def calculate_project_stats(
-    tool_context: ToolContext,
-    time_range: str = "30d",
-    group_by: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Calculate statistics for user's projects.
-    
-    Aggregates project data over specified time range with
-    optional grouping. Useful for dashboards and reports.
+def _validate_input(self, data: Dict[str, Any]) -> bool:
+    """Validate input data for completeness.
     
     Args:
-        tool_context (ToolContext): ADK context with user ID.
-        time_range (str): Time range for stats. Options:
-            - "24h": Last 24 hours
-            - "7d": Last 7 days  
-            - "30d": Last 30 days (default)
-            - "all": All time
-        group_by (Optional[str]): Grouping field:
-            - "category": Group by project category
-            - "status": Group by project status
-            - "week": Group by week
-            - None: No grouping (default)
+        data: Input dictionary to validate.
+        
+    Returns:
+        True if valid, False otherwise.
+    """
+```
+
+## Property Docstrings
+
+```python
+@property
+def is_ready(self) -> bool:
+    """Check if agent is initialized and ready.
     
     Returns:
-        dict: Statistical summary:
+        bool: True if all required components are loaded.
+    """
+    return self._initialized and self._tools_loaded
+```
+
+## Style Rules
+
+### 1. First Line Summary
+- One line, ending with period
+- Imperative mood ("Analyze" not "Analyzes")
+- Under 79 characters
+
+### 2. Extended Description
+- Blank line after summary
+- Explain why, not just what
+- Include important behavior details
+
+### 3. Args Section
+- List each parameter
+- Include type in parentheses
+- Describe purpose and constraints
+- Note optional parameters and defaults
+- Special note for `tool_context` parameter
+
+### 4. Returns Section
+- Specify type
+- Describe structure for complex returns
+- Provide example structure for dicts
+- Include all possible status values
+
+### 5. Other Sections (as needed)
+- **Raises**: Exception types and conditions
+- **Yields**: For generators
+- **Example**: Usage examples
+- **Note**: Important information
+- **Warning**: Potential issues
+- **See Also**: Related functions
+
+## ADK-Specific Requirements
+
+### Tool Functions MUST:
+1. Have minimum 5-line docstring
+2. Document `tool_context` parameter explicitly
+3. Include `Returns` section with example structure
+4. Show `status` field in return example
+5. List possible error states
+
+### Agent Classes MUST:
+1. Describe agent's role and capabilities
+2. List all available tools
+3. Include usage example
+4. Note model and configuration
+
+## Examples of Good vs Bad
+
+### ❌ Bad Example
+```python
+def save_data(ctx, data):
+    """Save data."""  # Too brief!
+    return db.save(data)
+```
+
+### ✅ Good Example
+```python
+def save_project_data(
+    tool_context: ToolContext,
+    project_data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Save project data to Supabase with user association.
+    
+    Creates a new project record linked to the current user,
+    validates required fields, and updates session state.
+    
+    Args:
+        tool_context (ToolContext): ADK context for state access.
+        project_data (dict): Project information containing:
+            - title (str): Project title
+            - description (str): Detailed description
+            - budget_range (dict, optional): Min/max budget
+            
+    Returns:
+        dict: Operation result:
             {
                 "status": "success",
-                "stats": {
-                    "total_projects": 42,
-                    "average_budget": 5000.00,
-                    "completion_rate": 0.75,
-                    "by_category": {...} if grouped
-                },
-                "time_range": "30d",
-                "generated_at": "2025-05-23T10:00:00Z"
+                "project_id": "uuid-string",
+                "created_at": "2025-05-23T10:00:00Z"
             }
     """
 ```
 
-### Quality Checklist
+## Validation Script
 
-- [ ] Summary explains the "what"
-- [ ] Description explains the "why" and "when"
-- [ ] All parameters documented with types
-- [ ] Return structure is explicit
-- [ ] Error cases are covered
-- [ ] Examples provided for complex tools
-- [ ] Special behaviors noted
-- [ ] No typos or grammar errors
+```python
+# scripts/validate_docstrings.py
+import ast
+import sys
+
+def check_docstring(node, filename, errors):
+    """Validate docstring compliance."""
+    if not ast.get_docstring(node):
+        errors.append(f"{filename}:{node.lineno} - Missing docstring")
+        return
+        
+    docstring = ast.get_docstring(node)
+    lines = docstring.split('\n')
+    
+    # Check minimum length for tools
+    if isinstance(node, ast.FunctionDef) and 'tool' in node.name:
+        if len(lines) < 5:
+            errors.append(
+                f"{filename}:{node.lineno} - Tool docstring too short"
+            )
+    
+    # Check for required sections
+    if isinstance(node, ast.FunctionDef):
+        if 'Args:' not in docstring and node.args.args:
+            errors.append(
+                f"{filename}:{node.lineno} - Missing Args section"
+            )
+        if 'Returns:' not in docstring:
+            errors.append(
+                f"{filename}:{node.lineno} - Missing Returns section"
+            )
+```
+
+## Enforcement
+
+1. **Pre-commit Hook**: Validates docstrings before commit
+2. **CI Check**: Fails build if docstrings missing
+3. **Code Review**: Human verification of quality
+4. **Documentation Generator**: Auto-generates API docs from docstrings

@@ -1,208 +1,277 @@
-## Task Prompt: Critique and Review Code
+## Task: Critique and Improve Code
 
 ### Goal
 
-Review code for quality, adherence to standards, and potential issues. Provide actionable feedback.
+Review code for quality, adherence to best practices, and potential issues. Provide actionable feedback and improved versions.
 
-### Review Checklist
+### Review Criteria
 
-#### 1. ADK Compliance
-- [ ] Imports use `from google import genai`
-- [ ] Agents exported as `agent`
-- [ ] Tools have `tool_context: ToolContext` first
-- [ ] State keys use proper prefixes
-- [ ] Model ID is valid
-- [ ] Tool returns include "status"
+#### 1. ADK Best Practices
+- [ ] Correct import pattern (`from google import genai`)
+- [ ] Agent exported as `agent` not `root_agent`
+- [ ] Tools have `tool_context` as first parameter
+- [ ] State keys use proper prefixes (`user:`, `app:`, `temp:`)
+- [ ] Model ID is appropriate for use case
+- [ ] No AdkApp wrapper pattern used
 
 #### 2. Code Quality
-- [ ] Functions have docstrings
-- [ ] Type hints are used
-- [ ] No code duplication
-- [ ] Proper error handling
-- [ ] Logging is appropriate
-- [ ] Comments explain "why" not "what"
+- [ ] Clear, descriptive naming
+- [ ] Proper type hints
+- [ ] Comprehensive docstrings
+- [ ] DRY principle followed
+- [ ] Single responsibility per function/class
+- [ ] Appropriate abstraction levels
 
-#### 3. Security
-- [ ] No hardcoded credentials
-- [ ] Input validation present
+#### 3. Error Handling
+- [ ] All exceptions caught appropriately
+- [ ] Meaningful error messages
+- [ ] Graceful degradation
+- [ ] No silent failures
+- [ ] Proper logging
+
+#### 4. Security
+- [ ] Input validation
+- [ ] No hardcoded secrets
 - [ ] SQL injection prevention
-- [ ] Path traversal protection
 - [ ] Proper authentication checks
+- [ ] RLS considerations
 
-#### 4. Performance
+#### 5. Performance
+- [ ] Efficient algorithms
+- [ ] Appropriate caching
+- [ ] Batch operations where possible
 - [ ] No unnecessary loops
-- [ ] Efficient database queries
-- [ ] Proper caching usage
-- [ ] Async/await used correctly
-- [ ] No blocking operations
+- [ ] Async where beneficial
 
-#### 5. Testing
-- [ ] Tests exist for new code
-- [ ] Edge cases covered
-- [ ] Mocks used appropriately
-- [ ] Tests are maintainable
+### Review Process
 
-### Review Format
+```python
+# Example code review format
+"""
+Code Review: {module_name}
 
-```markdown
-## Code Review: [Component Name]
+Overall Score: 8/10
 
-### Summary
-- **Overall Quality**: 🟢 Good / 🟡 Needs Improvement / 🔴 Major Issues
-- **ADK Compliance**: ✅ Pass / ❌ Fail
-- **Test Coverage**: X%
+## Strengths
+- Clear structure and organization
+- Good error handling
+- Comprehensive docstrings
 
-### Strengths
-1. [Positive aspect 1]
-2. [Positive aspect 2]
+## Issues Found
 
-### Issues Found
+### 🔴 Critical (Must Fix)
+1. **Import Pattern**
+   - Line 5: `import google.generativeai as genai`
+   - Fix: `from google import genai`
 
-#### 🔴 Critical Issues
-1. **[Issue Title]**
-   - Location: `file.py:line`
-   - Problem: [Description]
-   - Impact: [Why this matters]
-   - Fix: 
-   ```python
-   # Suggested correction
-   ```
+2. **Missing State Prefix**
+   - Line 42: `tool_context.state["project_id"] = id`
+   - Fix: `tool_context.state["user:current_project_id"] = id`
 
-#### 🟡 Improvements Needed
-1. **[Improvement Title]**
-   - Location: `file.py:line`
-   - Current: [What exists]
-   - Better: [What it should be]
-   - Example:
-   ```python
-   # Improved version
-   ```
+### 🟡 Important (Should Fix)
+1. **No Input Validation**
+   - Function `save_project` accepts any data
+   - Add Pydantic model for validation
 
-#### 🔵 Suggestions
-1. **[Suggestion Title]**
-   - Consider: [Recommendation]
-   - Benefits: [Why this helps]
+### 🟢 Suggestions (Nice to Have)
+1. **Consider Caching**
+   - Frequent DB queries could be cached
+   - Use @lru_cache or Redis
 
-### Action Items
-- [ ] Fix critical issue #1
-- [ ] Address improvement #1
-- [ ] Add missing tests
-- [ ] Update documentation
+## Improved Version
+"""
 ```
 
-### Common Issues to Check
+### Code Improvement Template
 
-#### Wrong Import Pattern
 ```python
-# ❌ Wrong
-import google.generativeai as genai
+# BEFORE: Original code with issues
+def problematic_function(data):
+    # No type hints
+    # No docstring
+    # No validation
+    result = db.insert(data)  # No error handling
+    return result
 
-# ✅ Correct
-from google import genai
+# AFTER: Improved version
+from typing import Dict, Any
+from pydantic import BaseModel, validator
+import logging
+
+logger = logging.getLogger(__name__)
+
+class ProjectData(BaseModel):
+    """Validated project data model."""
+    title: str
+    description: str
+    
+    @validator('title')
+    def title_not_empty(cls, v):
+        if not v.strip():
+            raise ValueError('Title cannot be empty')
+        return v
+
+def save_project(
+    tool_context: ToolContext,
+    data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Save project with validation and error handling.
+    
+    Args:
+        tool_context (ToolContext): ADK context for state.
+        data (dict): Project data to save.
+        
+    Returns:
+        dict: Result with status and project ID.
+    """
+    try:
+        # Validate input
+        validated_data = ProjectData(**data)
+        
+        # Add metadata
+        project_dict = validated_data.dict()
+        project_dict['owner_id'] = tool_context.state.get("user:id")
+        
+        # Save to database
+        result = db.table('projects').insert(project_dict).execute()
+        
+        # Update state
+        tool_context.state["user:current_project_id"] = result.data[0]['id']
+        
+        logger.info(f"Project saved: {result.data[0]['id']}")
+        
+        return {
+            "status": "success",
+            "project_id": result.data[0]['id']
+        }
+        
+    except ValidationError as e:
+        logger.warning(f"Validation failed: {e}")
+        return {
+            "status": "error",
+            "message": "Invalid project data",
+            "errors": e.errors()
+        }
+    except Exception as e:
+        logger.error(f"Failed to save project: {e}")
+        return {
+            "status": "error",
+            "message": "Failed to save project"
+        }
 ```
 
-#### Missing Tool Context
-```python
-# ❌ Wrong
-def my_tool(data: dict) -> dict:
-    pass
+### Common Patterns to Fix
 
-# ✅ Correct
-def my_tool(tool_context: ToolContext, data: dict) -> dict:
-    pass
+#### Pattern 1: Async Without Await
+```python
+# BAD
+async def get_data():
+    return db.fetch()  # Missing await
+
+# GOOD
+async def get_data():
+    return await db.fetch()
 ```
 
-#### Improper State Management
+#### Pattern 2: Mutable Default Arguments
 ```python
-# ❌ Wrong
-context.state["project_id"] = "123"
+# BAD
+def process(items=[]):
+    items.append("new")
+    return items
 
-# ✅ Correct
-context.state["user:project_id"] = "123"
+# GOOD
+def process(items=None):
+    if items is None:
+        items = []
+    items.append("new")
+    return items
 ```
 
-#### Poor Error Handling
+#### Pattern 3: Broad Exception Handling
 ```python
-# ❌ Wrong
+# BAD
 try:
-    result = risky_operation()
+    complex_operation()
 except:
-    return {"error": "Failed"}
+    pass  # Silent failure
 
-# ✅ Correct
+# GOOD
 try:
-    result = risky_operation()
+    complex_operation()
 except SpecificError as e:
     logger.error(f"Operation failed: {e}")
-    return {
-        "status": "error",
-        "message": f"Failed to complete operation: {str(e)}",
-        "error_code": "OPERATION_FAILED"
-    }
+    raise
+except Exception as e:
+    logger.exception("Unexpected error")
+    return error_response(e)
 ```
 
-#### Missing Validation
-```python
-# ❌ Wrong
-def save_project(tool_context, title, budget):
-    # Direct use without validation
-    
-# ✅ Correct
-def save_project(tool_context, title: str, budget: float):
-    if not title or len(title) < 3:
-        return {"status": "error", "message": "Title too short"}
-    
-    if budget < 0:
-        return {"status": "error", "message": "Invalid budget"}
+### Checklist for Review
+
+```markdown
+## Code Review Checklist
+
+### Structure
+- [ ] File organization logical
+- [ ] Imports organized (stdlib, third-party, local)
+- [ ] No circular imports
+- [ ] Appropriate module separation
+
+### Documentation
+- [ ] Module docstring present
+- [ ] All public functions documented
+- [ ] Complex logic has inline comments
+- [ ] README updated if needed
+
+### Testing
+- [ ] Unit tests exist
+- [ ] Edge cases covered
+- [ ] Integration tests for workflows
+- [ ] Test coverage > 80%
+
+### ADK Specific
+- [ ] Components.json updated
+- [ ] Agent registration correct
+- [ ] Tool signatures valid
+- [ ] State management proper
+
+### Deployment
+- [ ] Environment variables documented
+- [ ] Migration scripts included
+- [ ] CI/CD pipeline passes
+- [ ] Performance benchmarked
 ```
 
-### Review Priorities
+### Output Format
 
-1. **Security vulnerabilities** - Fix immediately
-2. **Data corruption risks** - Fix before deployment
-3. **Performance bottlenecks** - Fix if impacting users
-4. **Code maintainability** - Fix in next iteration
-5. **Style issues** - Fix when touching the code
+```markdown
+# Code Review Summary
 
-### Automated Checks
+**File**: `{file_path}`
+**Reviewer**: AI Code Critic
+**Date**: {current_date}
 
-Run these before manual review:
-```bash
-# Linting
-poetry run ruff check .
+## Overview
+{brief_summary}
 
-# Type checking
-poetry run mypy .
+## Critical Issues (0)
+{list_critical_issues_or_none}
 
-# Security scan
-poetry run bandit -r src/
+## Warnings (2)
+1. {warning_1}
+2. {warning_2}
 
-# Test coverage
-poetry run pytest --cov=instabids
+## Suggestions (3)
+1. {suggestion_1}
+2. {suggestion_2}
+3. {suggestion_3}
+
+## Recommended Actions
+1. {action_1}
+2. {action_2}
+
+## Approval Status
+✅ Approved with minor changes
 ```
-
-### Feedback Guidelines
-
-1. **Be specific**: Point to exact lines and files
-2. **Be constructive**: Suggest improvements, not just problems
-3. **Be educational**: Explain why something is an issue
-4. **Be practical**: Consider development constraints
-5. **Be positive**: Acknowledge good practices
-
-### Sample Review Comments
-
-**For Good Code**:
-> "Excellent error handling here. The specific exception types and detailed messages will help with debugging."
-
-**For Issues**:
-> "This tool is missing the required `tool_context` parameter. Add it as the first parameter to comply with ADK standards. See docs/ADK_BEST_PRACTICES.md for details."
-
-**For Improvements**:
-> "Consider extracting this logic into a separate function for better testability and reuse. This would also make the main function more readable."
-
-### Post-Review Actions
-
-1. Create GitHub issues for major problems
-2. Update tests to prevent regression
-3. Document patterns in team wiki
-4. Share learnings with team

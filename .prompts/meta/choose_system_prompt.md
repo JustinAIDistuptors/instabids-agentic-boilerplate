@@ -1,61 +1,92 @@
 ## Meta Prompt: Choose System Prompt
 
-### Purpose
+### Task
 
-Analyze the current context and select the most appropriate system prompt for the task.
+Analyze the current conversation context and select the most appropriate system prompt for the task at hand.
 
 ### Available System Prompts
 
 1. **master_code_builder.md**
-   - For: General development, architecture, integration
-   - Keywords: build, implement, create, develop, integrate
+   - Use for: General coding tasks, orchestration, multi-file changes
+   - Keywords: "build", "create project", "implement feature", "refactor"
 
 2. **homeowner_agent_writer.md**
-   - For: HomeownerAgent specific implementation
-   - Keywords: homeowner, conversation, scoping, preferences
+   - Use for: HomeownerAgent specific implementation
+   - Keywords: "homeowner", "project scoping", "conversation flow", "Q&A"
 
-3. **debugging_agent.md**
-   - For: Fixing errors, troubleshooting, debugging
-   - Keywords: error, fix, debug, issue, problem
+3. **adk_specialist.md**
+   - Use for: ADK-specific patterns, agent architecture, tools
+   - Keywords: "ADK", "agent pattern", "tool development", "A2A protocol"
 
-4. **prompt_selector.md**
-   - For: Selecting prompts, meta-tasks
-   - Keywords: select, choose, prompt, meta
+4. **supabase_integration_agent.md**
+   - Use for: Database operations, RLS, storage, migrations
+   - Keywords: "database", "Supabase", "RLS", "migration", "storage"
 
-### Selection Process
+5. **debugging_agent.md**
+   - Use for: Fixing errors, troubleshooting, issue diagnosis
+   - Keywords: "error", "bug", "not working", "debug", "fix"
 
-1. Parse the request for key terms
-2. Match against prompt specializations
-3. Consider task complexity
-4. Return most specific applicable prompt
-
-### Decision Logic
+### Selection Logic
 
 ```python
-if "error" in request or "fix" in request:
-    return "system/debugging_agent.md"
-elif "homeowner" in request or "conversation" in request:
-    return "system/homeowner_agent_writer.md"
-elif "select" in request and "prompt" in request:
-    return "system/prompt_selector.md"
-else:
-    return "system/master_code_builder.md"  # Default
+def select_system_prompt(user_message: str) -> str:
+    """
+    Select appropriate system prompt based on context.
+    
+    Returns:
+        str: Path to selected prompt file.
+    """
+    message_lower = user_message.lower()
+    
+    # Check for debugging indicators
+    debug_keywords = ["error", "bug", "fix", "not working", "issue"]
+    if any(keyword in message_lower for keyword in debug_keywords):
+        return "system/debugging_agent.md"
+    
+    # Check for Supabase/database tasks
+    db_keywords = ["database", "supabase", "rls", "migration", "query"]
+    if any(keyword in message_lower for keyword in db_keywords):
+        return "system/supabase_integration_agent.md"
+    
+    # Check for ADK-specific tasks
+    adk_keywords = ["adk", "agent pattern", "tool", "a2a", "workflow"]
+    if any(keyword in message_lower for keyword in adk_keywords):
+        return "system/adk_specialist.md"
+    
+    # Check for HomeownerAgent tasks
+    homeowner_keywords = ["homeowner", "scoping", "conversation", "q&a"]
+    if any(keyword in message_lower for keyword in homeowner_keywords):
+        return "system/homeowner_agent_writer.md"
+    
+    # Default to master builder for general tasks
+    return "system/master_code_builder.md"
 ```
 
-### Return Format
+### Decision Factors
 
-Return ONLY the relative path:
-```
-system/selected_prompt.md
-```
+1. **Error States**: Debugging agent for any error messages
+2. **Component Focus**: Specialized agents for specific components
+3. **Task Complexity**: Master builder for multi-component tasks
+4. **Domain Expertise**: Specialist agents for deep technical work
 
-### Examples
+### Output Format
 
-Request: "Fix the Supabase connection error"
-Return: `system/debugging_agent.md`
+Return ONLY the relative path to the selected prompt file.
 
-Request: "Implement the contractor bidding agent"
-Return: `system/master_code_builder.md`
+Example outputs:
+- `system/debugging_agent.md`
+- `system/master_code_builder.md`
+- `system/adk_specialist.md`
 
-Request: "Update homeowner conversation flow"
-Return: `system/homeowner_agent_writer.md`
+### Context Clues
+
+**High Priority Indicators**:
+- Error messages or stack traces → debugging_agent
+- Database operations → supabase_integration_agent
+- Agent architecture questions → adk_specialist
+- Feature implementation → master_code_builder
+
+**Consider Previous Context**:
+- If already working on a specific component, continue with same specialist
+- If switching contexts, select new appropriate prompt
+- When unclear, default to master_code_builder

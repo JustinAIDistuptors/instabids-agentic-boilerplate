@@ -1,6 +1,6 @@
-## Convention: Git Commit Message Style
+# Git Commit Message Convention
 
-### Format
+## Format
 
 ```
 <type>(<scope>): <subject>
@@ -10,208 +10,222 @@
 <footer>
 ```
 
-### Commit Types
+## Rules
+
+### 1. Type (Required)
+
+Must be one of:
 
 - **feat**: New feature
 - **fix**: Bug fix
 - **docs**: Documentation changes
-- **style**: Code style changes (formatting, semicolons, etc)
-- **refactor**: Code refactoring without feature changes
+- **style**: Code style changes (formatting, missing semicolons, etc.)
+- **refactor**: Code changes that neither fix bugs nor add features
 - **perf**: Performance improvements
 - **test**: Adding or updating tests
-- **build**: Build system or dependency changes
+- **chore**: Maintenance tasks (updating dependencies, build process, etc.)
 - **ci**: CI/CD configuration changes
-- **chore**: Routine tasks, maintenance
+- **build**: Build system or external dependency changes
 - **revert**: Reverting a previous commit
 
-### Scope Examples
+### 2. Scope (Optional)
 
-- **agents**: Agent-related changes
-- **tools**: Tool implementations
+The part of the codebase affected:
+
+- **agents**: Agent implementations
+- **tools**: Tool functions
 - **api**: API endpoints
-- **db**: Database schemas or migrations
-- **auth**: Authentication/authorization
+- **db**: Database/migrations
 - **ui**: Frontend changes
+- **auth**: Authentication
+- **docs**: Documentation
+- **tests**: Test suite
 - **deps**: Dependencies
-- **config**: Configuration files
 
-### Subject Guidelines
+Example: `feat(agents): add ContractorAgent implementation`
 
-1. **Use imperative mood**: "add" not "adds" or "added"
-2. **Don't capitalize**: "fix bug" not "Fix bug"
-3. **No period at end**: "add feature" not "add feature."
-4. **Limit to 50 characters**
-5. **Be specific but concise**
+### 3. Subject (Required)
 
-### Body Guidelines
+- Use imperative mood ("add" not "adds" or "added")
+- Don't capitalize first letter
+- No period at the end
+- Maximum 50 characters
+- Complete the sentence: "If applied, this commit will..."
 
-1. **Wrap at 72 characters**
-2. **Explain what and why, not how**
-3. **Include motivation for change**
-4. **Contrast with previous behavior**
-5. **Use bullet points for multiple items**
+### 4. Body (Optional)
 
-### Footer Guidelines
+- Separate from subject with blank line
+- Wrap at 72 characters
+- Explain what and why, not how
+- Can use bullet points with "-" or "*"
 
-1. **Reference issues**: "Fixes #123"
-2. **Note breaking changes**: "BREAKING CHANGE: ..."
-3. **Co-authors**: "Co-authored-by: Name <email>"
+### 5. Footer (Optional)
 
-### Examples
+- Reference issues: `Fixes #123` or `Closes #456`
+- Breaking changes: `BREAKING CHANGE: description`
+- Co-authors: `Co-authored-by: Name <email>`
 
-#### Simple Feature
+## Examples
+
+### Simple Feature
 ```
-feat(agents): add image analysis to homeowner agent
-```
-
-#### Bug Fix with Details
-```
-fix(tools): correct state prefix validation in save_project
-
-The validation was checking for "user-" instead of "user:"
-prefix, causing valid state keys to be rejected.
-
-Fixes #456
+feat(agents): add image analysis to HomeownerAgent
 ```
 
-#### Breaking Change
+### Bug Fix with Detail
 ```
-refactor(api): restructure project endpoints
+fix(tools): handle RLS errors in save_project
 
-Consolidated project-related endpoints under /api/v1/projects
-to improve API organization and consistency.
+The save_project tool was not properly handling RLS policy
+violations, causing silent failures. Now returns specific
+error messages when permissions are denied.
 
-BREAKING CHANGE: All project endpoints now use /api/v1/projects
-prefix instead of /projects
-```
-
-#### Multiple Changes
-```
-feat(db): add contractor matching tables
-
-- Add contractors table with skills and service areas
-- Add contractor_invitations table for tracking
-- Add indexes for efficient geo-queries
-- Include RLS policies for all new tables
-
-Part of contractor matching feature #789
+Fixes #234
 ```
 
-#### Dependency Update
+### Breaking Change
 ```
-build(deps): update google-adk to 1.0.1
+refactor(api)!: change project endpoint response format
 
-Includes fix for create_session issue (#808) and
-improved error messages for tool validation.
-```
-
-#### Test Addition
-```
-test(agents): add integration tests for project creation flow
-
-Tests cover:
-- Successful project creation with all fields
-- Validation of required fields
-- Image upload handling
-- Preference learning from conversation
+BREAKING CHANGE: The /projects endpoint now returns data
+in a nested structure. Clients must update to handle:
+{
+  "data": { "projects": [...] },
+  "meta": { "total": 10 }
+}
 ```
 
-#### Documentation
+### Multiple Changes
 ```
-docs: update ADK best practices with streaming patterns
+feat(agents): implement OutboundRecruiterAgent
 
-Added examples for LiveAgent streaming responses and
-error handling in async contexts.
-```
+- Add contractor matching algorithm
+- Integrate with notification service
+- Support multi-channel outreach (email, SMS)
+- Add comprehensive test coverage
 
-#### Performance
-```
-perf(db): add composite index for project queries
+Part of contractor invitation feature.
 
-Reduces query time for user project lists from 200ms to 5ms
-by adding composite index on (owner_id, created_at DESC).
+Relates to #156
 ```
 
-### Commit Message Templates
-
-#### For AI Agents
-
-When committing as an AI agent, include agent identifier:
-
+### Documentation Update
 ```
-feat(agents): implement contractor bidding logic
+docs: update ADK best practices guide
 
-[AI: MasterCodeBuilder]
-
-Implemented bid evaluation algorithm that considers:
-- Price competitiveness
-- Contractor ratings
-- Previous project history
-- Availability alignment
+Add section on state management patterns and
+update examples to use ADK 1.0.0 syntax.
 ```
 
-#### For Fixes
-
+### Dependency Update
 ```
-fix(<scope>): <what was broken>
+chore(deps): upgrade google-adk to 1.0.1
 
-<Description of the issue>
-<How it was fixed>
-<Impact of the fix>
-
-Fixes #<issue-number>
+Includes fix for create_session issue (#808).
+No breaking changes.
 ```
 
-#### For Features
+### Revert
+```
+revert: "feat(agents): add parallel processing"
+
+This reverts commit 123abc456.
+
+Parallel processing causing race conditions in
+state updates. Need to implement proper locking
+first.
+```
+
+## Bad Examples (Don't Do This)
+
+❌ `Fixed bug` - Too vague
+❌ `Added new feature.` - Has period, not specific
+❌ `FEAT: Add HomeownerAgent` - Wrong capitalization
+❌ `add tests for everything` - Not capitalized
+❌ `Update code` - Too generic
+❌ `WIP` - Not descriptive
+
+## Commit Message Template
+
+Save as `.gitmessage` in project root:
 
 ```
-feat(<scope>): <what was added>
-
-<Why this feature is needed>
-<How it works>
-<Any configuration required>
-
-Closes #<issue-number>
+# <type>(<scope>): <subject>
+#
+# <body>
+#
+# <footer>
+#
+# Type: feat, fix, docs, style, refactor, perf, test, chore, ci, build, revert
+# Scope: agents, tools, api, db, ui, auth, docs, tests, deps
+# Subject: imperative mood, no capital, no period, <50 chars
+# Body: what and why, not how, wrap at 72 chars
+# Footer: fixes #issue, breaking changes, co-authors
 ```
 
-### Anti-patterns to Avoid
+Configure git to use template:
+```bash
+git config --local commit.template .gitmessage
+```
 
-❌ **Bad Examples**:
-- "fix" (too vague)
-- "Fix the thing" (not imperative, too vague)
-- "added new feature" (past tense)
-- "FEAT: Add feature!!!" (wrong format, excessive punctuation)
-- "various fixes and improvements" (too broad)
+## Enforcement
 
-✅ **Good Examples**:
-- "fix(auth): validate JWT expiration correctly"
-- "feat(tools): add batch operations for preferences"
-- "refactor(agents): extract common base configuration"
-- "docs(api): add webhook integration guide"
-
-### Commit Workflow
-
-1. **Stage related changes**: `git add -p`
-2. **Write commit message**: Follow format above
-3. **Review diff**: Ensure message matches changes
-4. **Commit**: `git commit`
-5. **Push with PR**: Create descriptive PR
-
-### Enforcing Standards
-
-Use commit hooks or CI checks:
+### 1. Git Hook (`.git/hooks/commit-msg`)
 
 ```bash
-# .gitmessage template
-# <type>(<scope>): <subject>
-# 
-# <body>
-# 
-# <footer>
+#!/bin/bash
+# Validate commit message format
 
-# Example pre-commit hook
-if ! grep -qE "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z]+\))?: .{1,50}$" "$1"; then
-    echo "Commit message does not follow conventional format"
+commit_regex='^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\([a-z]+\))?!?: .{1,50}$'
+
+if ! grep -qE "$commit_regex" "$1"; then
+    echo "Invalid commit message format!"
+    echo "Format: <type>(<scope>): <subject>"
+    echo "Example: feat(agents): add HomeownerAgent"
     exit 1
 fi
+```
+
+### 2. CI Validation
+
+```yaml
+# .github/workflows/commit-lint.yml
+name: Lint Commits
+on: [pull_request]
+
+jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: wagoid/commitlint-github-action@v5
+```
+
+### 3. Pre-commit Configuration
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.2.1
+    hooks:
+      - id: commitizen
+```
+
+## Tools
+
+### Commitizen
+```bash
+# Interactive commit
+pnpm run commit
+# or
+npx cz
+```
+
+### Generate Changelog
+```bash
+# Generate CHANGELOG.md from commits
+npx conventional-changelog -p angular -i CHANGELOG.md -s
 ```

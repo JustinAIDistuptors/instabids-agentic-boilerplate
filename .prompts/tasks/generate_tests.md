@@ -1,8 +1,8 @@
-## Task Prompt: Generate Comprehensive Tests
+## Task: Generate Comprehensive Tests
 
 ### Goal
 
-Create thorough test coverage for agents, tools, and integrations following pytest best practices.
+Create thorough test coverage for agents, tools, and integrations in the InstaBids project.
 
 ### Test Structure
 
@@ -11,17 +11,20 @@ tests/
 ├── agents/
 │   ├── test_homeowner.py
 │   ├── test_bidcard.py
-│   └── test_contractor.py
+│   └── test_recruiter.py
 ├── tools/
 │   ├── test_supabase_tools.py
 │   ├── test_vision_tools.py
 │   └── test_notification_tools.py
 ├── integration/
 │   ├── test_project_flow.py
-│   └── test_agent_communication.py
+│   ├── test_bidding_flow.py
+│   └── test_supabase_integration.py
+├── e2e/
+│   └── test_full_workflow.py
 ├── fixtures/
 │   ├── agent_fixtures.py
-│   └── db_fixtures.py
+│   └── data_fixtures.py
 └── conftest.py
 ```
 
@@ -30,177 +33,179 @@ tests/
 ```python
 # tests/agents/test_{agent_name}.py
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 from google.adk.testing import AgentTestHarness
-
 from instabids.agents.{agent_name} import agent
 
+@pytest.fixture
+def test_harness():
+    """Create test harness for agent."""
+    return AgentTestHarness(
+        agent=agent,
+        mock_llm_responses=True
+    )
 
-class Test{AgentClass}:
-    """Test suite for {AgentClass}."""
+@pytest.fixture
+def mock_tool_context():
+    """Mock tool context with state."""
+    context = Mock()
+    context.state = {
+        "user:id": "test-user-123",
+        "user:preferences": {},
+        "app:test_mode": True
+    }
+    return context
+
+class Test{AgentName}:
+    """Test suite for {AgentName}."""
     
-    @pytest.fixture
-    def harness(self):
-        """Provide test harness for agent."""
-        return AgentTestHarness(
-            agent=agent,
-            mock_llm_responses=True
-        )
+    def test_initialization(self):
+        """Test agent initializes correctly."""
+        assert agent.name == "{agent_name}"
+        assert agent.model == "gemini-2.0-flash-exp"
+        assert len(agent.tools) > 0
     
-    @pytest.fixture
-    def mock_context(self):
-        """Mock tool context."""
-        context = Mock()
-        context.state = {}
-        context.session_id = "test-session-123"
-        context.user_id = "test-user-456"
-        return context
+    def test_instructions_loaded(self):
+        """Test instructions are properly loaded."""
+        assert agent.instructions is not None
+        assert len(agent.instructions) > 100
+        assert "{key_phrase}" in agent.instructions
     
-    def test_agent_initialization(self, harness):
-        """Test agent initializes with correct configuration."""
-        assert harness.agent.name == "{agent_name}"
-        assert harness.agent.model == "gemini-2.0-flash-exp"
-        assert len(harness.agent.tools) > 0
-    
-    def test_required_tools_present(self, harness):
-        """Test all required tools are configured."""
-        tool_names = [t.__name__ for t in harness.agent.tools]
+    @pytest.mark.parametrize("input_text,expected_tool", [
+        ("I need to fix my roof", "save_project"),
+        ("Show me previous projects", "get_projects"),
+        ("Upload a photo", "analyze_image"),
+    ])
+    def test_tool_selection(self, test_harness, input_text, expected_tool):
+        """Test agent selects appropriate tools."""
+        test_harness.set_mock_response(f"I'll use {expected_tool}")
+        response = test_harness.run(input_text)
         
-        required_tools = [
-            "save_project",
-            "get_preferences",
-            "analyze_image"
+        assert test_harness.tool_called(expected_tool)
+    
+    def test_state_management(self, test_harness, mock_tool_context):
+        """Test agent manages state correctly."""
+        test_harness.set_tool_context(mock_tool_context)
+        test_harness.run("Create a new project")
+        
+        # Verify state updates
+        assert "user:current_project" in mock_tool_context.state
+        assert "app:last_interaction" in mock_tool_context.state
+    
+    @pytest.mark.integration
+    async def test_conversation_flow(self, test_harness):
+        """Test multi-turn conversation."""
+        conversation = [
+            ("I need help with my kitchen", "kitchen project"),
+            ("Budget is $10,000", "budget recorded"),
+            ("Timeline is 2 weeks", "timeline noted"),
         ]
         
-        for tool in required_tools:
-            assert tool in tool_names, f"Missing required tool: {tool}"
+        for user_input, expected_phrase in conversation:
+            response = await test_harness.run_async(user_input)
+            assert expected_phrase.lower() in response.lower()
     
-    @pytest.mark.asyncio
-    async def test_conversation_flow(self, harness):
-        """Test basic conversation flow."""
-        # Configure mock responses
-        harness.set_llm_response(
-            "Hello! I'd like to help you with your home improvement project."
-        )
-        
-        # Start conversation
-        response = await harness.run("I need to fix my roof")
-        
-        assert "roof" in response.lower()
-        assert harness.conversation_turns == 1
-    
-    @pytest.mark.asyncio
-    async def test_tool_invocation(self, harness, mock_context):
-        """Test agent correctly invokes tools."""
-        with patch('instabids.tools.supabase_tools.save_project') as mock_save:
-            mock_save.return_value = {
-                "status": "success",
-                "project_id": "proj-123"
-            }
-            
-            harness.set_llm_response(
-                "I'll save your project now.",
-                tool_calls=[{"name": "save_project", "args": {}}]
-            )
-            
-            response = await harness.run("Save my project")
-            
-            assert mock_save.called
-            assert "save" in response.lower()
-    
-    @pytest.mark.asyncio
-    async def test_error_handling(self, harness):
+    def test_error_handling(self, test_harness):
         """Test agent handles errors gracefully."""
-        # Simulate tool failure
-        with patch('instabids.tools.supabase_tools.save_project') as mock_save:
-            mock_save.side_effect = Exception("Database error")
-            
-            response = await harness.run("Save my project")
-            
-            assert "error" in response.lower() or "problem" in response.lower()
-            assert harness.agent_state.get("error_count", 0) > 0
+        test_harness.mock_tool_error("save_project", Exception("DB error"))
+        
+        response = test_harness.run("Save my project")
+        assert "error" in response.lower() or "problem" in response.lower()
+        assert "try again" in response.lower()
 ```
 
 ### Tool Test Template
 
 ```python
-# tests/tools/test_{tool_category}_tools.py
+# tests/tools/test_{category}_tools.py
 import pytest
 from unittest.mock import Mock, patch
-from instabids.tools.{tool_category}_tools import {tool_name}
+from instabids.tools.{category}_tools import {
+    tool_function_1,
+    tool_function_2
+}
 
+@pytest.fixture
+def mock_context():
+    """Create mock tool context."""
+    context = Mock()
+    context.state = {"user:id": "test-123"}
+    return context
 
-class Test{ToolName}:
-    """Test suite for {tool_name} tool."""
+@pytest.fixture
+def mock_supabase_client():
+    """Mock Supabase client."""
+    with patch('instabids.tools.{category}_tools.SupabaseClient') as mock:
+        client = Mock()
+        mock.get_client.return_value = client
+        yield client
+
+class Test{Category}Tools:
+    """Test suite for {category} tools."""
     
-    @pytest.fixture
-    def tool_context(self):
-        """Mock tool context."""
-        context = Mock()
-        context.state = {
-            "user:id": "test-user-123",
-            "app:environment": "test"
-        }
-        return context
-    
-    def test_success_case(self, tool_context):
+    def test_tool_success_case(
+        self, mock_context, mock_supabase_client
+    ):
         """Test successful tool execution."""
-        result = {tool_name}(
-            tool_context,
-            param1="valid_value",
-            param2=42
+        # Setup mock response
+        mock_supabase_client.table().insert().execute.return_value = Mock(
+            data=[{"id": "123", "status": "created"}]
+        )
+        
+        result = tool_function_1(
+            mock_context,
+            param1="value1",
+            param2="value2"
         )
         
         assert result["status"] == "success"
-        assert "data" in result
-        assert result["data"] is not None
+        assert "id" in result
+        assert mock_supabase_client.table.called
     
-    def test_input_validation(self, tool_context):
+    def test_tool_validation(
+        self, mock_context
+    ):
         """Test input validation."""
-        # Test missing required parameter
-        result = {tool_name}(
-            tool_context,
+        result = tool_function_1(
+            mock_context,
             param1="",  # Invalid empty string
-            param2=42
+            param2="valid"
         )
         
         assert result["status"] == "error"
-        assert "required" in result["message"].lower()
+        assert "Invalid input" in result["message"]
     
-    def test_type_validation(self, tool_context):
-        """Test parameter type validation."""
-        result = {tool_name}(
-            tool_context,
-            param1="valid",
-            param2="not_a_number"  # Should be int
+    def test_tool_error_handling(
+        self, mock_context, mock_supabase_client
+    ):
+        """Test error handling."""
+        mock_supabase_client.table().insert().execute.side_effect = \
+            Exception("Database error")
+        
+        result = tool_function_1(
+            mock_context,
+            param1="value1",
+            param2="value2"
         )
         
         assert result["status"] == "error"
-        assert "type" in result["message"].lower()
+        assert "Database error" in result["message"]
     
-    @patch('instabids.db.client.SupabaseClient.get_client')
-    def test_database_error(self, mock_client, tool_context):
-        """Test database error handling."""
-        mock_client.side_effect = Exception("Connection failed")
+    @pytest.mark.parametrize("state_key,expected_behavior", [
+        ("user:preferences", "use_existing"),
+        (None, "create_new"),
+    ])
+    def test_state_interaction(
+        self, mock_context, state_key, expected_behavior
+    ):
+        """Test tool state management."""
+        if state_key:
+            mock_context.state[state_key] = {"test": "data"}
         
-        result = {tool_name}(tool_context, param1="value", param2=42)
+        result = tool_function_2(mock_context)
         
-        assert result["status"] == "error"
-        assert "database" in result["message"].lower()
-    
-    def test_state_updates(self, tool_context):
-        """Test tool updates context state correctly."""
-        initial_state = tool_context.state.copy()
-        
-        result = {tool_name}(
-            tool_context,
-            param1="value",
-            param2=42
-        )
-        
-        # Check expected state changes
-        assert tool_context.state["app:last_tool_call"] == "{tool_name}"
-        assert len(tool_context.state) > len(initial_state)
+        # Verify behavior based on state
+        assert result["behavior"] == expected_behavior
 ```
 
 ### Integration Test Template
@@ -208,112 +213,75 @@ class Test{ToolName}:
 ```python
 # tests/integration/test_project_flow.py
 import pytest
-from instabids.agents import AgentFactory
-from instabids.db.client import SupabaseClient
-
+from instabids.agents import HomeownerAgent, BidCardAgent
+from instabids.db import test_db
 
 @pytest.mark.integration
-class TestProjectCreationFlow:
-    """Test complete project creation flow."""
+class TestProjectFlow:
+    """Integration tests for project creation flow."""
     
-    @pytest.fixture
-    async def clean_db(self):
-        """Ensure clean database state."""
-        client = SupabaseClient.get_client()
-        # Clean test data
+    @pytest.fixture(autouse=True)
+    def setup_teardown(self, test_db):
+        """Setup and cleanup for each test."""
+        test_db.reset()
         yield
-        # Cleanup after test
+        test_db.cleanup()
     
-    async def test_full_project_flow(self, clean_db):
-        """Test creating project from conversation to bid card."""
-        factory = AgentFactory()
+    async def test_complete_project_creation(self, test_db):
+        """Test full project creation workflow."""
+        # Initialize agents
+        homeowner = HomeownerAgent()
+        bidcard = BidCardAgent()
         
-        # Step 1: Homeowner creates project
-        homeowner = factory.get_agent("homeowner")
-        project_data = await homeowner.process(
-            "I need to repair my leaking roof. Budget is around $5000."
-        )
+        # Simulate user interaction
+        project_data = await homeowner.create_project({
+            "user_id": "test-user",
+            "description": "Kitchen renovation",
+            "images": ["test.jpg"]
+        })
         
         assert project_data["status"] == "success"
         assert "project_id" in project_data
         
-        # Step 2: Bid card generation
-        bidcard_agent = factory.get_agent("bidcard")
-        bid_card = await bidcard_agent.generate(
+        # Generate bid card
+        bid_card = await bidcard.generate(
             project_id=project_data["project_id"]
         )
         
-        assert bid_card["category"] == "repair"
+        assert bid_card["status"] == "final"
         assert bid_card["confidence"] >= 0.7
         
-        # Step 3: Verify in database
-        client = SupabaseClient.get_client()
-        
-        # Check project exists
-        project = client.table('projects').select('*').eq(
-            'id', project_data["project_id"]
-        ).single().execute()
-        
-        assert project.data is not None
-        assert project.data["title"] is not None
-        
-        # Check bid card exists
-        bid_card_db = client.table('bid_cards').select('*').eq(
-            'project_id', project_data["project_id"]
-        ).single().execute()
-        
-        assert bid_card_db.data is not None
-        assert bid_card_db.data["status"] == "final"
+        # Verify in database
+        project = test_db.get_project(project_data["project_id"])
+        assert project is not None
+        assert project["bid_cards"][0]["id"] == bid_card["id"]
 ```
 
-### Fixture Templates
+### Test Utilities
 
 ```python
 # tests/fixtures/agent_fixtures.py
 import pytest
 from typing import Dict, Any
 
-
-@pytest.fixture
-def mock_llm_response():
+class MockLLMResponse:
     """Mock LLM responses for testing."""
+    
     responses = {
-        "greeting": "Hello! How can I help you today?",
-        "project_query": "I understand you need help with {project_type}.",
-        "confirmation": "I've saved your project successfully."
+        "project_creation": "I'll help you create a project...",
+        "preference_recall": "I remember you prefer a budget of...",
+        "error_handling": "I encountered an issue but let me try..."
     }
-    return responses
-
+    
+    @classmethod
+    def get_response(cls, scenario: str) -> str:
+        return cls.responses.get(scenario, "Generic response")
 
 @pytest.fixture
-def sample_project_data():
-    """Sample project data for testing."""
-    return {
-        "title": "Roof Repair Project",
-        "description": "Fix leaking roof in master bedroom",
-        "budget_min": 3000,
-        "budget_max": 5000,
-        "timeline": "2 weeks",
-        "location": "Seattle, WA"
-    }
+def mock_llm_responses():
+    """Provide mock LLM responses."""
+    return MockLLMResponse()
 ```
-
-### Testing Best Practices
-
-1. **Use fixtures for reusable test data**
-2. **Mock external dependencies**
-3. **Test both success and failure paths**
-4. **Use descriptive test names**
-5. **Group related tests in classes**
-6. **Mark integration tests appropriately**
-7. **Clean up test data after runs**
-
-### Coverage Requirements
-
-- Minimum 80% code coverage
-- 100% coverage for critical paths
-- All error cases tested
-- All tool parameters validated
 
 ### Running Tests
 
@@ -330,16 +298,17 @@ poetry run pytest tests/agents/test_homeowner.py
 # Run only integration tests
 poetry run pytest -m integration
 
-# Run tests in parallel
-poetry run pytest -n auto
+# Run with verbose output
+poetry run pytest -v
+
+# Run and stop on first failure
+poetry run pytest -x
 ```
 
-### Validation Checklist
+### Coverage Goals
 
-- [ ] All public methods have tests
-- [ ] Error cases are tested
-- [ ] Mocks are used for external services
-- [ ] Tests are independent
-- [ ] No hardcoded test data
-- [ ] Cleanup is performed
-- [ ] Tests run in < 30 seconds
+- **Unit Tests**: 90%+ coverage
+- **Integration Tests**: Critical paths covered
+- **E2E Tests**: Happy path + key edge cases
+- **Performance Tests**: Response time benchmarks
+- **Security Tests**: Input validation, RLS checks

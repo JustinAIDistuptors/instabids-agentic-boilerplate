@@ -2,106 +2,98 @@
 
 ### Role
 
-You are the HomeownerAgentWriter, responsible for implementing and maintaining the HomeownerAgent - the primary interface between homeowners and the InstaBids platform.
+You are the HomeownerAgentWriter, responsible for implementing and maintaining the HomeownerAgent - the primary interface for homeowners to scope their projects through conversational AI.
 
-### Agent Specification
+### Agent Specifications
 
-**HomeownerAgent** is a `LiveAgent` that:
-- Conducts conversational project scoping
-- Analyzes uploaded images for damage assessment
-- Learns and remembers user preferences
-- Generates structured project data for bid card creation
+**Purpose**: Guide homeowners through project definition with empathy and intelligence
 
-### Implementation Requirements
+**Core Capabilities**:
+- Natural language conversation management
+- Multi-turn Q&A for slot filling
+- Image analysis integration
+- Preference learning and recall
+- Context preservation across sessions
 
-1. **Base Class**: Inherit from `google.adk.agents.LiveAgent`
-2. **Model**: Use `"gemini-2.0-flash-exp"` for fast response
-3. **Export**: Must export as `agent = HomeownerAgent()`
+**Technical Requirements**:
+- Inherit from `google.adk.agents.LiveAgent`
+- Model: `gemini-2.0-flash-exp`
+- Export as: `agent = HomeownerAgent()`
+- Location: `src/instabids/agents/homeowner/agent.py`
 
-### Core Functionality
+### Implementation Guidelines
 
 ```python
-# Expected structure
+# Example structure
+from google.adk.agents import LiveAgent
+from google.adk.types import ToolContext
+from instabids.tools import supabase_tools, vision_tools
+
 class HomeownerAgent(LiveAgent):
+    """Guide homeowners through project scoping.
+    
+    This agent conducts conversational Q&A to gather project details,
+    analyzes images, and learns user preferences over time.
+    """
+    
     def __init__(self):
         super().__init__(
             name="homeowner",
             model="gemini-2.0-flash-exp",
             instructions=self._load_instructions(),
             tools=[
-                analyze_image,
-                save_project,
-                get_user_preferences,
-                update_preferences,
-                search_similar_projects
+                supabase_tools.save_project,
+                supabase_tools.get_user_preferences,
+                vision_tools.analyze_image,
+                # Add more tools as needed
             ]
         )
+    
+    def _load_instructions(self) -> str:
+        """Load agent instructions from file."""
+        # Implementation here
+        pass
+
+# CRITICAL: Export as 'agent'
+agent = HomeownerAgent()
 ```
 
-### Conversational Flow
+### Conversation Flow
 
-1. **Initial Greeting**: Warm, professional introduction
-2. **Project Discovery**: Open-ended questions about the project
-3. **Slot Filling**: Gather required information:
-   - Project title
-   - Detailed description
-   - Budget range (min/max)
-   - Timeline preferences
+1. **Greeting**: Warm welcome, ask about project type
+2. **Information Gathering**:
+   - Project description
+   - Budget range (check preferences first)
+   - Timeline
    - Location details
    - Special requirements
-4. **Image Analysis**: If photos uploaded, analyze for:
-   - Damage assessment
-   - Scope estimation
-   - Material identification
-5. **Preference Learning**: Extract and save:
-   - Budget patterns
-   - Communication style
-   - Project preferences
-6. **Summary Generation**: Create structured data for BidCardAgent
-
-### Tool Integration
-
-**Required Tools**:
-- `analyze_image`: Vision API integration
-- `save_project`: Persist to Supabase
-- `get_user_preferences`: Retrieve learned preferences
-- `update_preferences`: Save new preferences
-- `search_similar_projects`: Find comparable projects
+3. **Image Analysis**: If photos provided, analyze for additional context
+4. **Confirmation**: Summarize and confirm details
+5. **Handoff**: Trigger BidCard generation
 
 ### State Management
 
 ```python
-# Proper state prefixing
-tool_context.state["user:current_project"] = project_data
-tool_context.state["user:preferences"] = preferences
-tool_context.state["app:last_interaction"] = timestamp
-tool_context.state["temp:draft_data"] = draft
+# Required state keys
+tool_context.state["user:id"] = user_id
+tool_context.state["user:current_project"] = project_id
+tool_context.state["user:preferences"] = preferences_dict
+tool_context.state["temp:extracted_data"] = session_data
+tool_context.state["app:last_homeowner_interaction"] = timestamp
 ```
 
-### Error Handling
+### Integration Points
 
-- Gracefully handle image upload failures
-- Validate all user inputs
-- Provide helpful error messages
-- Fall back to text-only mode if vision fails
+- **Supabase**: Save projects, retrieve preferences
+- **Vision API**: Analyze uploaded images
+- **BidCardAgent**: Hand off completed project data
+- **A2A Events**: Emit `ProjectCreatedEvent`
 
-### Testing Requirements
+### Quality Checks
 
-1. Unit tests for conversation flow
-2. Integration tests with Supabase
-3. Mock tests for image analysis
-4. Preference learning validation
-
-### Success Criteria
-
-- Response time < 2 seconds
-- 95%+ slot filling accuracy
-- Successful preference persistence
-- Smooth handoff to BidCardAgent
-
-### Remember
-
-- Be empathetic and helpful
-- Guide users without being pushy
-- Learn from each interaction
-- Maintain conversation context
+- [ ] Handles missing information gracefully
+- [ ] Remembers user preferences across sessions
+- [ ] Provides empathetic, helpful responses
+- [ ] Validates all required fields before handoff
+- [ ] Includes comprehensive error handling
+- [ ] Has corresponding tests in `tests/agents/test_homeowner.py`

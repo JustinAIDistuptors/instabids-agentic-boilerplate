@@ -1,241 +1,242 @@
-## Task Prompt: Implement Doctor Health Check Route
+## Task: Implement Health Check Doctor Route
 
 ### Goal
 
-Create a `/healthz/doctor` endpoint that provides comprehensive system health information for debugging and monitoring.
+Create a comprehensive health check endpoint that verifies system status for AI agents.
 
-### Implementation Steps
-
-#### 1. Create Route File
+### Implementation
 
 ```python
 # src/instabids/api/routes/health.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, HTTPException
 from typing import Dict, Any, List
-import sys
-import os
 import pkg_resources
-from datetime import datetime
+import psutil
 import asyncio
+from datetime import datetime
 
+# Imports for checks
 from google import genai
-from instabids.db.client import SupabaseClient
-from instabids.agents import AgentFactory
+from supabase import Client
+from instabids.db import SupabaseService
+from instabids.agents import agent_registry
 
-router = APIRouter(
-    prefix="/healthz",
-    tags=["health"]
-)
-
+router = APIRouter(prefix="/healthz", tags=["health"])
 
 @router.get("/doctor")
 async def doctor_check() -> Dict[str, Any]:
     """
-    Comprehensive health check endpoint.
+    Comprehensive health check for InstaBids system.
     
-    Returns system status including:
-    - Python environment
-    - Installed packages
-    - Available models
-    - Database connectivity
-    - Agent readiness
-    - Configuration status
+    Returns:
+        dict: System health status including:
+            - Model availability
+            - Package versions
+            - Database connectivity
+            - Agent status
+            - System resources
     """
-    health_data = {
+    health_report = {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "checks": {},
-        "issues": []
+        "warnings": [],
+        "errors": []
     }
     
-    # Python environment
-    health_data["environment"] = {
-        "python_version": sys.version,
-        "python_executable": sys.executable,
-        "platform": sys.platform,
-        "cwd": os.getcwd()
-    }
-    
-    # Package versions
-    critical_packages = [
-        "google-adk",
-        "google-genai",
-        "supabase",
-        "fastapi",
-        "pydantic"
-    ]
-    
-    health_data["packages"] = {}
-    for package in critical_packages:
-        try:
-            version = pkg_resources.get_distribution(package).version
-            health_data["packages"][package] = version
-        except Exception:
-            health_data["packages"][package] = "NOT INSTALLED"
-            health_data["issues"].append(f"Package {package} not found")
-    
-    # Model availability
+    # 1. Check Model Registry
     try:
         models = [m.name for m in genai.discovery.list_models()]
-        health_data["checks"]["models"] = {
+        flash_models = [m for m in models if "flash" in m]
+        
+        health_report["checks"]["models"] = {
             "status": "ok",
-            "available_models": models,
-            "flash_model_present": any("flash" in m for m in models)
+            "available_models": len(models),
+            "flash_models": flash_models,
+            "recommended_model": "gemini-2.0-flash-exp" in flash_models
         }
+        
+        if "gemini-2.0-flash-exp" not in flash_models:
+            health_report["warnings"].append(
+                "Recommended model 'gemini-2.0-flash-exp' not found"
+            )
     except Exception as e:
-        health_data["checks"]["models"] = {
+        health_report["checks"]["models"] = {
             "status": "error",
-            "error": str(e)
+            "message": str(e)
         }
-        health_data["status"] = "degraded"
+        health_report["errors"].append(f"Model check failed: {e}")
     
-    # Database connectivity
+    # 2. Check Package Versions
     try:
-        client = SupabaseClient.get_client()
-        # Simple query to test connection
-        result = await asyncio.to_thread(
+        packages = {}
+        for pkg_name in ["google-adk", "google-genai", "supabase", "protobuf"]:
+            try:
+                version = pkg_resources.get_distribution(pkg_name).version
+                packages[pkg_name] = version
+            except:
+                packages[pkg_name] = "not installed"
+        
+        health_report["checks"]["packages"] = {
+            "status": "ok",
+            "versions": packages
+        }
+        
+        # Check for version compatibility
+        if packages.get("protobuf", "").startswith("6."):
+            health_report["warnings"].append(
+                "Protobuf 6.x detected - may cause issues with ADK 1.0.0"
+            )
+    except Exception as e:
+        health_report["checks"]["packages"] = {
+            "status": "error",
+            "message": str(e)
+        }
+    
+    # 3. Check Database Connectivity
+    try:
+        client = SupabaseService.get_client()
+        
+        # Test query
+        response = await asyncio.to_thread(
             lambda: client.table('projects').select('count').limit(1).execute()
         )
-        health_data["checks"]["database"] = {
+        
+        health_report["checks"]["database"] = {
             "status": "ok",
-            "connection": "established"
+            "connected": True,
+            "response_time_ms": "< 100"  # Could measure actual time
         }
     except Exception as e:
-        health_data["checks"]["database"] = {
+        health_report["checks"]["database"] = {
             "status": "error",
-            "error": str(e)
+            "connected": False,
+            "message": str(e)
         }
-        health_data["status"] = "unhealthy"
+        health_report["errors"].append(f"Database connection failed: {e}")
     
-    # Agent availability
+    # 4. Check Agent Registry
     try:
-        factory = AgentFactory()
-        available_agents = factory.list_agents()
-        health_data["checks"]["agents"] = {
+        agents = agent_registry.get_all_agents()
+        agent_status = []
+        
+        for agent_name, agent_instance in agents.items():
+            try:
+                # Basic validation
+                status = {
+                    "name": agent_name,
+                    "class": agent_instance.__class__.__name__,
+                    "tools": len(getattr(agent_instance, 'tools', [])),
+                    "status": "ready"
+                }
+                agent_status.append(status)
+            except Exception as e:
+                agent_status.append({
+                    "name": agent_name,
+                    "status": "error",
+                    "error": str(e)
+                })
+        
+        health_report["checks"]["agents"] = {
             "status": "ok",
-            "available": available_agents,
-            "count": len(available_agents)
+            "total_agents": len(agents),
+            "agents": agent_status
         }
     except Exception as e:
-        health_data["checks"]["agents"] = {
+        health_report["checks"]["agents"] = {
             "status": "error",
-            "error": str(e)
+            "message": str(e)
         }
     
-    # Environment variables
-    required_env_vars = [
+    # 5. Check System Resources
+    try:
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        
+        health_report["checks"]["system"] = {
+            "status": "ok",
+            "cpu_usage_percent": cpu_percent,
+            "memory_usage_percent": memory.percent,
+            "disk_usage_percent": disk.percent
+        }
+        
+        # Add warnings for high usage
+        if cpu_percent > 80:
+            health_report["warnings"].append(f"High CPU usage: {cpu_percent}%")
+        if memory.percent > 80:
+            health_report["warnings"].append(f"High memory usage: {memory.percent}%")
+        if disk.percent > 90:
+            health_report["warnings"].append(f"High disk usage: {disk.percent}%")
+    except Exception as e:
+        health_report["checks"]["system"] = {
+            "status": "error",
+            "message": str(e)
+        }
+    
+    # 6. Check Environment Variables
+    env_vars = [
         "SUPABASE_URL",
         "SUPABASE_SERVICE_KEY",
-        "GOOGLE_API_KEY"
+        "GOOGLE_API_KEY",
+        "OPENAI_API_KEY"
     ]
     
     missing_vars = []
-    for var in required_env_vars:
+    for var in env_vars:
         if not os.environ.get(var):
             missing_vars.append(var)
     
     if missing_vars:
-        health_data["checks"]["environment_vars"] = {
-            "status": "error",
-            "missing": missing_vars
-        }
-        health_data["status"] = "unhealthy"
-    else:
-        health_data["checks"]["environment_vars"] = {
-            "status": "ok",
-            "all_present": True
-        }
+        health_report["warnings"].append(
+            f"Missing environment variables: {', '.join(missing_vars)}"
+        )
     
-    # ADK cache status
-    cache_path = os.path.expanduser("~/.cache/adk/model_catalog.json")
-    health_data["checks"]["adk_cache"] = {
-        "exists": os.path.exists(cache_path),
-        "path": cache_path
-    }
+    # Determine overall status
+    if health_report["errors"]:
+        health_report["status"] = "unhealthy"
+    elif health_report["warnings"]:
+        health_report["status"] = "degraded"
     
-    # Overall status
-    if health_data["status"] == "healthy" and not health_data["issues"]:
-        health_data["message"] = "All systems operational"
-    elif health_data["status"] == "degraded":
-        health_data["message"] = "System operational with reduced functionality"
-    else:
-        health_data["message"] = "System experiencing issues"
+    # Return appropriate status code
+    if health_report["status"] == "unhealthy":
+        raise HTTPException(status_code=503, detail=health_report)
     
-    return health_data
+    return health_report
 
-
-@router.get("/ping")
-async def ping() -> Dict[str, str]:
-    """Simple ping endpoint for basic health check."""
-    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
-
+@router.get("/live")
+async def liveness_check() -> Dict[str, str]:
+    """Simple liveness check for Kubernetes."""
+    return {"status": "alive"}
 
 @router.get("/ready")
-async def readiness_check() -> Dict[str, Any]:
-    """
-    Readiness probe for Kubernetes/container orchestration.
-    
-    Returns 200 if system is ready to accept traffic.
-    Returns 503 if system is not ready.
-    """
+async def readiness_check() -> Dict[str, str]:
+    """Readiness check for load balancers."""
     try:
-        # Quick checks only
-        client = SupabaseClient.get_client()
-        factory = AgentFactory()
-        
-        return {
-            "ready": True,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        return {
-            "ready": False,
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        # Quick DB check
+        client = SupabaseService.get_client()
+        await asyncio.to_thread(
+            lambda: client.table('projects').select('count').limit(1).execute()
+        )
+        return {"status": "ready"}
+    except:
+        raise HTTPException(status_code=503, detail={"status": "not ready"})
 ```
 
-#### 2. Register Route in Main API
+### Integration with Main App
 
 ```python
 # src/instabids/api/main.py
 from fastapi import FastAPI
-from instabids.api.routes import health, projects, agents
+from instabids.api.routes import health
 
-app = FastAPI(
-    title="InstaBids API",
-    version="0.1.0",
-    description="AI-Driven Multi-Agent Bidding Platform"
-)
+app = FastAPI(title="InstaBids API")
 
-# Register routes
+# Include health routes
 app.include_router(health.router)
-app.include_router(projects.router)
-app.include_router(agents.router)
 ```
 
-#### 3. Add Middleware for Metrics
-
-```python
-# src/instabids/api/middleware/metrics.py
-import time
-from fastapi import Request
-from typing import Callable
-
-
-async def metrics_middleware(request: Request, call_next: Callable):
-    """Add response time headers."""
-    start_time = time.time()
-    
-    response = await call_next(request)
-    
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
-    
-    return response
-```
-
-#### 4. Create Tests
+### Test Implementation
 
 ```python
 # tests/api/test_health.py
@@ -243,60 +244,49 @@ import pytest
 from fastapi.testclient import TestClient
 from instabids.api.main import app
 
+client = TestClient(app)
 
-class TestHealthEndpoints:
-    @pytest.fixture
-    def client(self):
-        return TestClient(app)
+def test_doctor_route():
+    """Test comprehensive health check."""
+    response = client.get("/healthz/doctor")
     
-    def test_ping(self, client):
-        """Test basic ping endpoint."""
-        response = client.get("/healthz/ping")
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "ok"
-        assert "timestamp" in data
+    assert response.status_code in [200, 503]
+    data = response.json()
     
-    def test_doctor_endpoint(self, client):
-        """Test comprehensive health check."""
-        response = client.get("/healthz/doctor")
-        
-        assert response.status_code == 200
-        data = response.json()
-        
-        # Check required fields
-        assert "status" in data
-        assert "timestamp" in data
-        assert "checks" in data
-        assert "environment" in data
-        assert "packages" in data
-        
-        # Verify package checks
-        assert "google-adk" in data["packages"]
-        assert "google-genai" in data["packages"]
+    assert "status" in data
+    assert "checks" in data
+    assert "timestamp" in data
     
-    def test_readiness(self, client):
-        """Test readiness probe."""
-        response = client.get("/healthz/ready")
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert "ready" in data
-        assert "timestamp" in data
+    # Verify all checks present
+    expected_checks = [
+        "models", "packages", "database", "agents", "system"
+    ]
+    for check in expected_checks:
+        assert check in data["checks"]
+
+def test_liveness_check():
+    """Test simple liveness endpoint."""
+    response = client.get("/healthz/live")
+    assert response.status_code == 200
+    assert response.json() == {"status": "alive"}
+
+def test_readiness_check():
+    """Test readiness endpoint."""
+    response = client.get("/healthz/ready")
+    assert response.status_code in [200, 503]
 ```
 
 ### Usage Examples
 
 ```bash
 # Check system health
-curl http://localhost:8001/healthz/doctor | jq .
+curl http://localhost:8000/healthz/doctor | jq
 
-# Simple ping
-curl http://localhost:8001/healthz/ping
+# Kubernetes liveness probe
+curl http://localhost:8000/healthz/live
 
-# Readiness check (for k8s)
-curl http://localhost:8001/healthz/ready
+# Load balancer health check
+curl http://localhost:8000/healthz/ready
 ```
 
 ### Response Example
@@ -304,55 +294,48 @@ curl http://localhost:8001/healthz/ready
 ```json
 {
   "status": "healthy",
-  "timestamp": "2025-05-23T10:30:00Z",
-  "message": "All systems operational",
-  "environment": {
-    "python_version": "3.12.0",
-    "platform": "linux"
-  },
-  "packages": {
-    "google-adk": "1.0.0",
-    "google-genai": "1.16.1",
-    "supabase": "2.0.0"
-  },
+  "timestamp": "2025-05-23T10:00:00Z",
   "checks": {
     "models": {
       "status": "ok",
-      "available_models": ["gemini-2.0-flash-exp"],
-      "flash_model_present": true
+      "available_models": 15,
+      "flash_models": ["gemini-2.0-flash-exp"],
+      "recommended_model": true
+    },
+    "packages": {
+      "status": "ok",
+      "versions": {
+        "google-adk": "1.0.0",
+        "google-genai": "1.17.0",
+        "supabase": "2.0.0",
+        "protobuf": "5.29.4"
+      }
     },
     "database": {
       "status": "ok",
-      "connection": "established"
+      "connected": true,
+      "response_time_ms": "< 100"
     },
     "agents": {
       "status": "ok",
-      "available": ["homeowner", "bidcard"],
-      "count": 2
+      "total_agents": 5,
+      "agents": [
+        {
+          "name": "homeowner",
+          "class": "HomeownerAgent",
+          "tools": 8,
+          "status": "ready"
+        }
+      ]
+    },
+    "system": {
+      "status": "ok",
+      "cpu_usage_percent": 15.2,
+      "memory_usage_percent": 45.8,
+      "disk_usage_percent": 62.3
     }
   },
-  "issues": []
+  "warnings": [],
+  "errors": []
 }
 ```
-
-### Monitoring Integration
-
-```python
-# For Prometheus/Grafana
-@router.get("/metrics")
-async def metrics():
-    """Prometheus-compatible metrics endpoint."""
-    return PlainTextResponse(
-        content=generate_metrics(),
-        media_type="text/plain"
-    )
-```
-
-### Success Criteria
-
-- [ ] Endpoint returns 200 OK
-- [ ] All system checks included
-- [ ] Response time < 1 second
-- [ ] Proper error handling
-- [ ] Tests pass
-- [ ] Documentation updated
