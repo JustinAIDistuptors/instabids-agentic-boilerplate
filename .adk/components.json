@@ -1,0 +1,70 @@
+{
+  "agents": [
+    {
+      "name": "homeowner",
+      "module": "instabids.agents.homeowner",
+      "class": "HomeownerAgent",
+      "description": "Guides homeowners through project scoping with conversational Q&A"
+    },
+    {
+      "name": "bidcard",
+      "module": "instabids.agents.bidcard",
+      "class": "BidCardAgent",
+      "description": "Generates structured bid cards from project information"
+    },
+    {
+      "name": "prompt_selector",
+      "module": "instabids.agents.prompt_selector",
+      "class": "PromptSelectorAgent",
+      "description": "Meta-agent that selects appropriate prompts for tasks"
+    },
+    {
+      "name": "outbound_recruiter",
+      "module": "instabids.agents.recruiter",
+      "class": "OutboundRecruiterAgent",
+      "description": "Matches projects with contractors and sends invitations"
+    },
+    {
+      "name": "contractor",
+      "module": "instabids.agents.contractor",
+      "class": "ContractorAgent",
+      "description": "Assists contractors in reviewing projects and formulating bids"
+    }
+  ],
+  "tools": [
+    {
+      "name": "supabase_tools",
+      "module": "instabids.tools.supabase_tools",
+      "description": "Database operations for projects, preferences, and messages"
+    },
+    {
+      "name": "vision_tools",
+      "module": "instabids.tools.vision_tools",
+      "description": "Image analysis for project photos using OpenAI Vision"
+    },
+    {
+      "name": "notification_tools",
+      "module": "instabids.tools.notification_tools",
+      "description": "Multi-channel notifications (email, SMS, in-app)"
+    }
+  ],
+  "sessions": {
+    "type": "persistent",
+    "backend": "supabase",
+    "config": {
+      "table": "agent_sessions",
+      "ttl_seconds": 3600
+    }
+  },
+  "tracing": {
+    "enabled": true,
+    "exporter": "stdout",
+    "config": {
+      "log_level": "INFO"
+    }
+  },
+  "live_config": {
+    "max_ttl_secs": 300,
+    "default_model": "gemini-2.0-flash-exp"
+  }
+}
