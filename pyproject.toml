@@ -1,0 +1,98 @@
+[tool.poetry]
+name = "instabids"
+version = "0.1.0"
+description = "AI-Driven Multi-Agent Bidding Platform for Home Improvement Projects"
+authors = ["InstaBids AI Team <ai@instabids.com>"]
+readme = "README.md"
+packages = [{include = "instabids", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+google-adk = {extras = ["vertexai"], version = "~1.0.0"}
+google-genai = ">=1.16.1,<1.18.0"  # Pin to avoid AsyncIterator issue
+protobuf = "==5.29.4"  # Critical: Pin to avoid pb2 errors
+grpcio-status = "==1.71.0"  # Compatible with protobuf 5.29.4
+httpx = ">=0.28.1,<1"
+pydantic = "^2.11"
+supabase = "^2.0.0"
+fastapi = "^0.115.0"
+uvicorn = {extras = ["standard"], version = "^0.34.0"}
+python-multipart = "^0.0.20"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+openai = "^1.65.0"  # For vision features
+python-dotenv = "^1.0.0"
+structlog = "^24.0.0"
+rich = "^13.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.0"
+pytest-asyncio = "^0.25.0"
+pytest-cov = "^6.0.0"
+pytest-mock = "^3.14.0"
+black = "^24.0.0"
+ruff = "^0.8.0"
+mypy = "^1.13.0"
+pre-commit = "^4.0.0"
+ipython = "^8.31.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "live: marks tests that require live API access",
+]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+follow_imports = "normal"
+
+[[tool.mypy.overrides]]
+module = [
+    "google.adk.*",
+    "google.genai.*",
+    "supabase.*",
+]
+ignore_missing_imports = true
